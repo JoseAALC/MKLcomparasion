@@ -1,0 +1,4 @@
+test portion: 0.2
+data portion used: 1
+data size: (303, 19)
+portion of class: 0.541254125413

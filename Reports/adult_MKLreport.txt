@@ -1,0 +1,10 @@
+test portion: 0.2
+data portion used: 0.0368539049783
+data size: (1200, 91)
+portion of class: 0.735
+MKL_random MATRIX:
+tn: 50
+fp: 14
+fn: 12
+tp: 52
+END MATRIX
