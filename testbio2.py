@@ -57,9 +57,9 @@ test_rate =0.2
 print("Dataset name without extension:")
 dataset_name = raw_input()
 
-results_file=open("Reports//"+dataset_name+"_MKLresults.csv","w")
-report_file=open("Reports//"+dataset_name+"_MKLreport.txt","w")
-pred_file=open("Reports//"+dataset_name+"_predictions.txt","w")
+results_file=open("Reports//"+dataset_name+"_12MKLresults.csv","w")
+report_file=open("Reports//"+dataset_name+"_12MKLreport.txt","w")
+pred_file=open("Reports//"+dataset_name+"_12predictions.txt","w")
 results_file.write("algorithm,accuracy,F1,rocauc,precision,recall\n")
 
 data_rate =0.2
@@ -214,7 +214,8 @@ def BoostingKernels(samples,classes,rbf_par,poly_par,scorer,errorallowed):
    
     
 
-def kfolding2(samples,classes,model,model_name,folds = None):
+
+def kfolding(samples,classes,model,model_name,folds = None):
    global results_file
    global report_file
    #print("Y: " +str(classes))
@@ -233,13 +234,13 @@ def kfolding2(samples,classes,model,model_name,folds = None):
    if folds == None:
       #k_folds =StratifiedKFold(n_splits=5 , random_state=0)
       k_folds = RepeatedKFold(n_splits=2, n_repeats=5, random_state=0)
-      print("F: "+str(k_folds.split(samples)))
+   
    
    predictionsTotal = np.array([])
    #for train_index, test_index in k_folds.split(samples,classes):
    for train_index, test_index in k_folds.split(samples):
       model.fit(samples[train_index,:],classes.iloc[train_index])
-      predictions = model.predict(samples[test_index])
+      predictions = cls.predict(samples[test_index])
       predictionsTotal=np.concatenate([predictionsTotal,predictions])
       metrics["accuracy"].append(accuracy_score(classes.iloc[test_index], predictions))
       metrics["F1"].append(f1_score(classes.iloc[test_index], predictions))
@@ -270,38 +271,7 @@ def kfolding2(samples,classes,model,model_name,folds = None):
   
    results_file.write(model_name +","+results_string+"\n")
    
-   return (k_folds,predictionsTotal)
-
-def kfolding(samples,classes,model,model_name,folds = None):
-   global results_file
-   global report_file
-   #print("Y: " +str(classes))
-   
-
-
-   predictions = model.predict(samples)
-
-
-   tn, fp, fn, tp = confusion_matrix(classes, predictions).ravel()
-   report_file.write(model_name +" MATRIX:\n")
-   report_file.write("tn: " +str(tn)+"\n")
-   report_file.write("fp: " +str(fp)+"\n")
-   report_file.write("fn: " +str(fn)+"\n")
-   report_file.write("tp: " +str(tp)+"\n")
-   report_file.write("END MATRIX\n")
-
-
-
-   results_string = str(accuracy_score(classes, predictions))+"," 
-   results_string+= str(f1_score(classes, predictions)) +","
-   results_string+=str(roc_auc_score(classes, predictions)) +","
-   results_string+=str(precision_score(classes, predictions)) +","
-   results_string+=str(recall_score(classes, predictions)) +","
-  
-   results_file.write(model_name +","+results_string+"\n")
-   
-   return ("k_folds",predictions)
-
+   return k_folds,predictionsTotal
 
 def counting(df):
    zeros =0
@@ -348,7 +318,7 @@ def fitness1(genom,extra=None):
         score+=f1_score(y_test, predictions)
 
 
-    return score/5
+    return score/10
 
      
 
@@ -405,19 +375,10 @@ def prep(df):
       print("Rebalancing data")
       sm = RandomUnderSampler(random_state=42)
       X_all, y_all = sm.fit_resample(X_all, y_all)
-      #features.remove("class")
-     # X_all = pd.DataFrame.from_records(X_all)
-      print("Y:",y_all)
-     # print(y_all)
-     # y_all = np.reshape(y_all, (-1, 1))
-     # print(y_all)
-     # y_all = pd.DataFrame.from_records(y_all)
-     # print(y_all)
-      #print ("X: ", X_all) 
-   else:
-      y_all=y_all.values
-     # print("Y:",y_all)
-      #print("X: ",X_all)
+      features.remove("class")
+      X_all = pd.DataFrame.from_records(X_all)
+      #y_all = pd.DataFrame.from_records(y_all)
+      y_all = pd.DataFrame(y_all)
 
    #normalize
    X_all = preprocessing.MinMaxScaler((1,2)).fit(X_all).transform(X_all)
@@ -449,7 +410,8 @@ df = pd.read_csv("Clean Datasets//"+dataset_name+".csv")
 x_train, x_test, y_train, y_test = prep(df)
 
 
-
+#Use this same foldes in the test phase
+k_folds = RepeatedKFold(n_splits=2, n_repeats=5, random_state=0)
 
 
 gammas = [i /df.shape[1] for i in range(1,7,1)]
@@ -488,7 +450,7 @@ fitness_report=open("Reports//"+dataset_name+"fitness.txt","w")
 
 kernels = ramdom_kernels(kernels_indexes,x_train,y_train,parameters,pparameters)
 para = {
-        "pop":18,
+        "pop":2,
         "size":len(kernels_indexes),
         "fit":fitness1,
         "X":x_bio,
@@ -540,4 +502,3 @@ report_file.close()
 exit()
 
 
-x

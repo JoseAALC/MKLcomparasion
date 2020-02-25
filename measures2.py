@@ -21,9 +21,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import Binarizer
 from scipy.stats import wilcoxon
 from imblearn.over_sampling import SMOTE 
-from imblearn.under_sampling import RandomUnderSampler
 from sklearn.neural_network import MLPClassifier
-
+from imblearn.under_sampling import RandomUnderSampler
 
 #models
 from sklearn.tree import DecisionTreeClassifier as DT
@@ -45,6 +44,11 @@ from mklaren.kernel.kinterface import Kinterface
 from mklaren.kernel.kernel import linear_kernel, poly_kernel,rbf_kernel
 from mklaren.mkl.alignf import Alignf
 
+
+
+import scipy.stats as sttest
+
+
 #consts
 np.random.seed(800)
 start=0
@@ -57,13 +61,14 @@ test_rate =0.2
 print("Dataset name without extension:")
 dataset_name = raw_input()
 
-results_file=open("Reports//"+dataset_name+"_MKLresults.csv","w")
-report_file=open("Reports//"+dataset_name+"_MKLreport.txt","w")
-pred_file=open("Reports//"+dataset_name+"_predictions.txt","w")
+results_file=open("Reports//"+dataset_name+"_12results.csv","w")
+report_file=open("Reports//"+dataset_name+"_12report.txt","w")
+pred_file=open("Reports//"+dataset_name+"_12predictions.txt","w")
 results_file.write("algorithm,accuracy,F1,rocauc,precision,recall\n")
 
 data_rate =0.2
 report_file.write("test portion: "+str(test_rate)+"\n")
+
 
 
 
@@ -89,10 +94,7 @@ def scores(y,evaluation,model_name,out):
    result+=  str(f1_score(y,evaluation))+","+str(roc_auc_score(y,evaluation))+"\n"
    out.write(result)
 
-
-
-
-def tunning_svm(samples,classes,rbf_par,poly_par,scorer):
+def tunning_svm(samples,classes,rbf_par,poly_par,scorer,target_counts):
    
    
    svm_rbf =SVC(kernel="rbf")
@@ -117,8 +119,6 @@ def tunning_svm(samples,classes,rbf_par,poly_par,scorer):
    grid_obj = grid_obj.fit(samples, classes)
    svm= grid_obj.best_estimator_
    return svm
-
-
 
 def createKernelCombination(kernel_indexs,samples,classes,rbf_par,poly_par,scorer):
    kernels= []
@@ -209,12 +209,8 @@ def tunningMKL(paramters,samples,classes,rbf_par,poly_par,scorer):
    svm= grid_obj.best_estimator_
    return svm
 
-def BoostingKernels(samples,classes,rbf_par,poly_par,scorer,errorallowed):
-   return 0
    
-    
-
-def kfolding2(samples,classes,model,model_name,folds = None):
+def kfolding(samples,classes,model,model_name,folds = None):
    global results_file
    global report_file
    #print("Y: " +str(classes))
@@ -239,7 +235,7 @@ def kfolding2(samples,classes,model,model_name,folds = None):
    #for train_index, test_index in k_folds.split(samples,classes):
    for train_index, test_index in k_folds.split(samples):
       model.fit(samples[train_index,:],classes.iloc[train_index])
-      predictions = model.predict(samples[test_index])
+      predictions = cls.predict(samples[test_index])
       predictionsTotal=np.concatenate([predictionsTotal,predictions])
       metrics["accuracy"].append(accuracy_score(classes.iloc[test_index], predictions))
       metrics["F1"].append(f1_score(classes.iloc[test_index], predictions))
@@ -272,37 +268,32 @@ def kfolding2(samples,classes,model,model_name,folds = None):
    
    return (k_folds,predictionsTotal)
 
-def kfolding(samples,classes,model,model_name,folds = None):
-   global results_file
-   global report_file
-   #print("Y: " +str(classes))
+
+def fitness1(genom,extra=None):
+    datx = extra["X"]
+    daty = extra["Y"]
+    kernel_indexs = extra["Ki"]
+    kernels= extra["K"]
+
+
+
+    combined_k = lambda x,y: \
+      sum([genom[i]*kernels[i](x[:,kernel_indexs[i]],y[:,kernel_indexs[i]]) for i in range(len(kernels))])
+    
+    score =0
    
 
-
-   predictions = model.predict(samples)
-
-
-   tn, fp, fn, tp = confusion_matrix(classes, predictions).ravel()
-   report_file.write(model_name +" MATRIX:\n")
-   report_file.write("tn: " +str(tn)+"\n")
-   report_file.write("fp: " +str(fp)+"\n")
-   report_file.write("fn: " +str(fn)+"\n")
-   report_file.write("tp: " +str(tp)+"\n")
-   report_file.write("END MATRIX\n")
+    for i in range(10):
+        x_train, x_test, y_train, y_test = train_test_split(datx,daty,test_size =test_rate,stratify=daty,random_state=0)
+        cls =SVC(kernel=combined_k)
+        cls.fit(x_train, y_train)
+        predictions = cls.predict(x_test)
+        score+=f1_score(y_test, predictions)
 
 
+    return score/10
 
-   results_string = str(accuracy_score(classes, predictions))+"," 
-   results_string+= str(f1_score(classes, predictions)) +","
-   results_string+=str(roc_auc_score(classes, predictions)) +","
-   results_string+=str(precision_score(classes, predictions)) +","
-   results_string+=str(recall_score(classes, predictions)) +","
-  
-   results_file.write(model_name +","+results_string+"\n")
-   
-   return ("k_folds",predictions)
-
-
+     
 def counting(df):
    zeros =0
    ones =0
@@ -314,51 +305,18 @@ def counting(df):
          ones+=1
 
    return [zeros,ones]   
-      
 
 
+def prepro(df):
+   print(counting(df))
 
-
-def fitness1(genom,extra=None):
-    datx = extra["X"]
-    daty = extra["Y"]
-    kernel_indexs = extra["Ki"]
-    kernels= extra["K"]
-    seed = extra["seed"]
-
-
-    combined_k = lambda x,y: \
-      sum([genom[i]*kernels[i](x[:,kernel_indexs[i]],y[:,kernel_indexs[i]]) for i in range(len(kernels))])
-    
-    score =0
-    np.random.seed(seed)
-    target_counts = counting(df)
-   
-    
-    #print("SEED: " + str(rng1.randint(0, 1000, 1)))
-    for i in range(5):
-        x_train, x_test, y_train, y_test = train_test_split(datx,daty,test_size =test_rate,stratify=daty)
-        #print("HEAD START")
-        #print(x_train[:10])
-        #print( "HEAD END")
-        #cls =SVC(kernel=combined_k,class_weight={0:target_counts[1]/target_counts[0],1:1})
-        cls =SVC(kernel=combined_k)
-        cls.fit(x_train, y_train)
-        predictions = cls.predict(x_test)
-        score+=f1_score(y_test, predictions)
-
-
-    return score/5
-
-     
-
-def prep(df):
-   #sample data
-   
+   print(df.shape)
    data_rate=1200/df.shape[0]
+   print(data_rate)
    if data_rate >1:
       data_rate=1
    report_file.write("data portion used: "+str(data_rate)+"\n")
+   #sample data
    df = df.sample(frac=data_rate, replace=False,random_state=0)
 
    #remove repeated rows
@@ -405,21 +363,15 @@ def prep(df):
       print("Rebalancing data")
       sm = RandomUnderSampler(random_state=42)
       X_all, y_all = sm.fit_resample(X_all, y_all)
-      #features.remove("class")
-     # X_all = pd.DataFrame.from_records(X_all)
-      print("Y:",y_all)
-     # print(y_all)
-     # y_all = np.reshape(y_all, (-1, 1))
-     # print(y_all)
-     # y_all = pd.DataFrame.from_records(y_all)
-     # print(y_all)
-      #print ("X: ", X_all) 
-   else:
-      y_all=y_all.values
-     # print("Y:",y_all)
-      #print("X: ",X_all)
+      features.remove("class")
+      X_all = pd.DataFrame.from_records(X_all)
+      #y_all = pd.DataFrame.from_records(y_all)
+      y_all = pd.DataFrame(y_all)
+
+
 
    #normalize
+   #X_all = preprocessing.normalize(X_all)
    X_all = preprocessing.MinMaxScaler((1,2)).fit(X_all).transform(X_all)
    #print(X_all[0:5,:])
 
@@ -446,10 +398,11 @@ df = pd.read_csv("Clean Datasets//"+dataset_name+".csv")
 
 
 
-x_train, x_test, y_train, y_test = prep(df)
+x_train, x_test, y_train, y_test = prepro(df)
 
 
-
+#Use this same foldes in the test phase
+k_folds = RepeatedKFold(n_splits=2, n_repeats=5, random_state=0)
 
 
 gammas = [i /df.shape[1] for i in range(1,7,1)]
@@ -463,76 +416,107 @@ pparameters ={
 
 
 
-
-
-#MKL
-
-#kernels_indexes = [np.random.choice([k for k in range(400)],replace=False,size=(400)) for j in range(40)]
-kernels_indexes = [[i for i in range(x_train.shape[1])] for j in range(40)]
-parameters3 ={
-                "C":[10**i for i in range(-1,3)]}
-
-
-
-fix_time()
+predictionsTest = {}
 
 
 
 
 
+target_counts = counting(df)
 
-x_bio, x_tun, y_bio, y_tun = train_test_split(x_train,y_train,test_size =0.5,stratify=y_train,random_state=0)
-
-fitness_report=open("Reports//"+dataset_name+"fitness.txt","w")
-
-
-kernels = ramdom_kernels(kernels_indexes,x_train,y_train,parameters,pparameters)
-para = {
-        "pop":18,
-        "size":len(kernels_indexes),
-        "fit":fitness1,
-        "X":x_bio,
-        "Y":y_bio,
-        "Ki":kernels_indexes,
-        "K":kernels,
-        "file":fitness_report
-}
-
-
-
-
-
-
-
-
-
-w=genetic(para)
-fitness_report.close()
-
-
-
-combined_kernel3 = lambda x,y: \
-sum([w[i]*kernels[i](x[:,kernels_indexes[i]],y[:,kernels_indexes[i]]) for i in range(len(kernels))])
-
-
-print("get weights:" +  str(elapsed()))
-
-
+#decision tree
+cls = DT()
 
 fix_time()
-
-cls =SVC(kernel=combined_kernel3)
-
-
-grid_obj = GridSearchCV(cls, parameters3, scoring=scorer,cv=5)
-grid_obj = grid_obj.fit(x_tun, y_tun)
-print("Tunning:" +  str(elapsed()))
-cls = grid_obj.best_estimator_
-    
 cls.fit(x_train, y_train)
-mklpredictions = cls.predict(x_test)
-pred_file.write("MKL: " +str(kfolding(x_test,y_test,cls,"MKL_random")[1])+"\n")
+report_file.write("decision tree time: " + str(elapsed())+str("\n"))
 
+predictions = cls.predict(x_test)
+
+print("Tree:")
+predictionsTest["Tree"] = kfolding(x_test,y_test,cls,"Tree")[1]
+
+pred_file.write("Tree: " +str(predictionsTest["Tree"])+"\n")
+
+
+#KNN
+cls =KNN()
+
+parameters ={
+             "n_neighbors":[1,3,5,7,9,11]}
+fix_time()
+grid_obj = GridSearchCV(cls, parameters, scoring=scorer,cv=5)
+grid_obj = grid_obj.fit(x_train, y_train)
+
+cls = grid_obj.best_estimator_
+report_file.write("KNN time: " + str(elapsed())+str("\n"))
+
+print("KNN:")
+predictionsTest["KNN"] =kfolding(x_test,y_test,cls,"KNN")[1]
+pred_file.write("KNN: " +str(predictionsTest["KNN"])+"\n")
+#Naive Bayes
+cls =nb()
+
+parameters ={
+             "var_smoothing":[1e-09,1e-08,1e-07,1e-06,1e-05,1e-04,1e-03,1e-02,1e-01,1]}
+
+fix_time()
+grid_obj = GridSearchCV(cls, parameters, scoring=scorer,cv=5)
+grid_obj = grid_obj.fit(x_train, y_train)
+
+cls = grid_obj.best_estimator_
+report_file.write("NB time: " + str(elapsed())+str("\n"))
+
+print("Naive Bayes:")
+predictionsTest["Naive Bayes"] = kfolding(x_test,y_test,cls,"Naive Bayes")[1]
+pred_file.write("NB: " +str(predictionsTest["Naive Bayes"])+"\n")
+#Random Forest
+cls =rf()
+
+parameters ={
+             "n_estimators":[i*10 for i in range(10,50,100)]}
+
+fix_time()
+grid_obj = GridSearchCV(cls, parameters, scoring=scorer,cv=5)
+grid_obj = grid_obj.fit(x_train, y_train)
+
+cls = grid_obj.best_estimator_
+report_file.write("Random Forest time: " + str(elapsed())+"\n")
+
+print("Random Forest:")
+predictionsTest["Random Forest"]=kfolding(x_test,y_test,cls,"Random Forest")[1]
+pred_file.write("RF: " +str(predictionsTest["Random Forest"])+"\n")
+#SVM
+
+gammas = [i /df.shape[1] for i in range(1,7,1)]
+#print(df.shape)
+#print(gammas)
+parameters ={
+             "C":[10**i for i in range(-5,3)],
+          "gamma":gammas}
+pparameters ={
+             "C":[10**i for i in range(-5,3)],
+          "degree":[1,2,3]}
+
+print("SVM:")
+fix_time()
+cls=tunning_svm(x_train,y_train,parameters,pparameters,scorer,target_counts)
+report_file.write("SVM time: " + str(elapsed())+str("\n"))
+
+
+
+predictionsTest["SVM"] =kfolding(x_test,y_test,cls,"SVM")[1]
+pred_file.write("SVM: " +str(predictionsTest["SVM"])+"\n")
+
+
+#Neural network
+print("Neural Network:")
+fix_time()
+cls = MLPClassifier(hidden_layer_sizes=(100,), random_state=1)
+cls.fit(x_train, y_train)
+report_file.write("Neural Network time: " + str(elapsed())+str("\n"))
+predictionsTest["Neural Network"]=kfolding(x_test,y_test,cls,"Neural Network")[1]
+pred_file.write("NN: " +str(predictionsTest["Neural Network"])+"\n")
 
 pred_file.close()
 results_file.close()
@@ -540,4 +524,3 @@ report_file.close()
 exit()
 
 
-x

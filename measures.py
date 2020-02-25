@@ -31,6 +31,11 @@ from sklearn.neighbors import KNeighborsClassifier as KNN
 from sklearn.naive_bayes import GaussianNB as nb
 from sklearn.ensemble import RandomForestClassifier as rf
 
+#Fearure selection
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import chi2
+
 
 from bio import genetic
 
@@ -74,8 +79,6 @@ report_file.write("test portion: "+str(test_rate)+"\n")
 
 
 #functions
-
-#functions used to save the duration of the algorithms
 def fix_time():
     global start
     start = time.time()
@@ -150,8 +153,6 @@ def createKernelCombination(kernel_indexs,samples,classes,rbf_par,poly_par,score
       sum([mu[i]*kernels[i](x[:,kernel_indexs[i]],y[:,kernel_indexs[i]]) for i in range(len(kernels))])
    return combined_k
 
-
-
 def ramdom_kernels_combination(kernel_indexs,samples,classes,rbf_par,poly_par,scorer):
    kernels= []
    for indexes in kernel_indexs:    
@@ -214,7 +215,65 @@ def tunningMKL(paramters,samples,classes,rbf_par,poly_par,scorer):
    svm= grid_obj.best_estimator_
    return svm
 
-#function used to measure performance for each algorithm
+   
+def kfolding2(samples,classes,model,model_name,folds = None):
+   global results_file
+   global report_file
+   #print("Y: " +str(classes))
+   
+   metrics ={
+      "accuracy":[],
+      "F1":[],
+      "precision":[],
+      "recall":[],
+      "rocauc":[]
+   }
+
+
+
+   k_folds = folds
+   if folds == None:
+      #k_folds =StratifiedKFold(n_splits=5 , random_state=0)
+      k_folds = RepeatedKFold(n_splits=2, n_repeats=5, random_state=0)
+      print("F: "+str(k_folds.split(samples)))
+   
+   predictionsTotal = np.array([])
+   #for train_index, test_index in k_folds.split(samples,classes):
+   for train_index, test_index in k_folds.split(samples):
+      model.fit(samples[train_index,:],classes.iloc[train_index])
+      predictions = model.predict(samples[test_index])
+      predictionsTotal=np.concatenate([predictionsTotal,predictions])
+      metrics["accuracy"].append(accuracy_score(classes.iloc[test_index], predictions))
+      metrics["F1"].append(f1_score(classes.iloc[test_index], predictions))
+      metrics["rocauc"].append(roc_auc_score(classes.iloc[test_index], predictions))
+      metrics["precision"].append(precision_score(classes.iloc[test_index], predictions))
+      metrics["recall"].append(recall_score(classes.iloc[test_index], predictions))
+
+      tn, fp, fn, tp = confusion_matrix(classes.iloc[test_index], predictions).ravel()
+      report_file.write(model_name +" MATRIX:\n")
+      report_file.write("tn: " +str(tn)+"\n")
+      report_file.write("fp: " +str(fp)+"\n")
+      report_file.write("fn: " +str(fn)+"\n")
+      report_file.write("tp: " +str(tp)+"\n")
+      report_file.write("END MATRIX\n")
+     # print("tn: " +str(tn))
+
+
+   metrics["accuracy"]=np.array(metrics["accuracy"])
+   metrics["F1"]=np.array(metrics["F1"])
+   metrics["rocauc"]=np.array(metrics["rocauc"])
+   metrics["precision"]=np.array(metrics["precision"])
+   metrics["recall"]=np.array(metrics["recall"])
+   results_string = str(np.mean(metrics["accuracy"])) +"+"+str(np.std(metrics["accuracy"]))+"," 
+   results_string+= str(np.mean(metrics["F1"]))  +"+"+str(np.std(metrics["F1"])) +","
+   results_string+=str(np.mean(metrics["rocauc"]))+ "+"+str(np.std(metrics["rocauc"])) +","
+   results_string+=str(np.mean(metrics["precision"]))+ "+"+str(np.std(metrics["precision"])) +","
+   results_string+=str(np.mean(metrics["recall"]))+ "+"+str(np.std(metrics["recall"])) +","
+  
+   results_file.write(model_name +","+results_string+"\n")
+   
+   return (k_folds,predictionsTotal)
+
 def kfolding(samples,classes,model,model_name,folds = None):
    global results_file
    global report_file
@@ -245,7 +304,7 @@ def kfolding(samples,classes,model,model_name,folds = None):
    
    return ("k_folds",predictions)
 
-#fitness function used for genetic algorithm
+
 def fitness1(genom,extra=None):
     datx = extra["X"]
     daty = extra["Y"]
@@ -270,7 +329,7 @@ def fitness1(genom,extra=None):
 
     return score/10
 
-#conts the number of elements foe each one of the two classes 
+     
 def counting(df):
    global class_name
    zeros =0
@@ -290,8 +349,7 @@ def prepro(df):
    print(counting(df))
 
    print(df.shape)
-   #calculates the rate to use only 1200 rows at max
-   data_rate=1200/df.shape[0]
+   data_rate=2400/df.shape[0]
    print("Rate",data_rate)
    if data_rate >1:
       data_rate=1
@@ -299,10 +357,13 @@ def prepro(df):
   
    #sample data
    df = df.sample(frac=data_rate, replace=False,random_state=0)
-
+   #print("Size: ",df.shape)
    #remove repeated rows
    df = df.drop_duplicates()
-
+   #print("Size2: ",df.shape)
+   #print(df.head())
+   #dropnas
+   #df.isna().sum()
    df=df.dropna(axis=0)
    #print("Size3: ",df.shape)
    #print(df["Attr1"].value_counts())
@@ -381,11 +442,6 @@ def prepro(df):
    x_train, x_test, y_train, y_test = train_test_split(X_all,y_all,test_size =test_rate,stratify=y_all,random_state=0)
 
    return x_train, x_test,y_train,y_test
-
-
-
-
-
 #-----------------------------------------END HEADER-----------------------------------------------
 
 

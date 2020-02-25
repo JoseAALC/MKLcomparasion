@@ -1,3 +1,4 @@
+from __future__ import division
 import random ,time
 from multiprocessing.pool import ThreadPool
 from threading import Thread
@@ -64,7 +65,103 @@ def crossoverR(par1,par2):
     return child
 
 
+def small_step_genetic(inp):
+    Pm = 0.01
+    start_time = time.time()
+
+    #population initialization
+    popolation = inp["pop"]
+    gen_size = inp["size"]
+    fitness = inp["fit"]
+    fitness_f = inp["file"]
+    pop = []
+    rng1 = np.random.RandomState(40)
+
+    for individual in range(popolation):
+        inp["seed"] = rng1.randint(0, 1000, 1)[0]
+        gene= [ random.uniform(0,1) for i in range(gen_size)  ]
+        maximun = max(gene)
+        minimun = min(gene)
+        #normalize
+        #new_gene = [ (x - minimun) / (maximun-minimun) for x in gene]
+        #print(gene)
+        #print("------")
+        #print(new_gene)
+        
+        new_gene_fit= fitness(gene,inp)
+        pop.append(  {"ind":gene,"fit":new_gene_fit})
     
+    
+    #print(pop)
+    best_list= []
+    for i in range(25):
+        #giving 11 hours to finish
+        if (time.time() -start_time) > 11*60*60:
+            fitness_f.write("TIMEOUT!\n")
+            break
+        print("generation: " +str(i+1))
+        inp["seed"] = rng1.randint(0, 1000, 1)[0]
+        
+        
+        fitness_list = [ind["fit"] for ind in pop ]
+        
+        
+        best_list.append(max(fitness_list))
+        print("best: " + str(best_list))
+        if len(best_list)>3:
+            best_list.pop(0)
+        if best_list[1:] == best_list[:-1] and len(best_list)==3:
+            Pm+=0.05
+            print("Mutation: " + str(Pm))
+        else:
+            Pm=0.01
+
+        
+        print("individual: " + str(fitness_list))
+        maximun = max(fitness_list)
+        
+        fitness_f.write("Best: " + str(maximun) +"\n")
+
+        print("\n\nBest: " + str(maximun))
+  
+
+        
+        x = parent_selection(fitness_list)
+        y = parent_selection(fitness_list)
+        child = crossoverR(pop[x]["ind"],pop[y]["ind"])
+        new_ind =  {"ind":child,"fit":fitness(child,inp)}
+        
+        pop.append(new_ind)
+        index = -1
+        minimun = 2
+        for i in range(len(pop)):
+            if pop[i]["fit"] < minimun:
+                minimun = pop[i]["fit"]
+                index = i
+        
+        pop.pop(index)
+        
+        
+        for individual in range(len(pop)):
+            if random.uniform(0,1) < Pm:
+                pop[individual]["ind"] = mutation(pop[individual]["ind"])
+
+
+        print("Population size: " + str(len(pop)))
+
+    index = -1
+    maximun = -2
+    for i in range(len(pop)):
+        if pop[i]["fit"] > maximun:
+            maximun = pop[i]["fit"]
+            index = i
+    return pop[index]["ind"]
+
+
+
+
+    
+
 
 def genetic(inp):
    
@@ -121,10 +218,12 @@ def genetic(inp):
             Pm+=0.05
             print("Mutation: " + str(Pm))
         else:
-            mutation=0.01
+            Pm=0.01
         
         maximun = max(fitness_list)
-        best_fit = fitness(The_best,inp)
+        best_fit =0
+        if The_best != None:
+            best_fit = fitness(The_best,inp)
         fitness_f.write("Best: " + str(maximun) +"\n")
         if best_fit < maximun:
             for j in range(len(fitness_list)):

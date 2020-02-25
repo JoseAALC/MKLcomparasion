@@ -59,7 +59,7 @@ dataset_name = raw_input()
 
 results_file=open("Reports//"+dataset_name+"_MKLresults.csv","w")
 report_file=open("Reports//"+dataset_name+"_MKLreport.txt","w")
-pred_file=open("Reports//"+dataset_name+"_predictions.txt","w")
+pred_file=open("Reports//"+dataset_name+"_MKLpredictions.txt","w")
 results_file.write("algorithm,accuracy,F1,rocauc,precision,recall\n")
 
 data_rate =0.2
@@ -169,7 +169,7 @@ def ramdom_kernels_combination(kernel_indexs,samples,classes,rbf_par,poly_par,sc
    model.fit(kernels, classes.values)
    model.mu  # kernel weights (convex combination)
    mu = model.mu
-   print("numbers:" +str(mu))
+   #print("numbers:" +str(mu))
 
    combined_k = lambda x,y: \
       sum([mu[i]*kernels[i](x[:,kernel_indexs[i]],y[:,kernel_indexs[i]]) for i in range(len(kernels))])
@@ -233,7 +233,7 @@ def kfolding2(samples,classes,model,model_name,folds = None):
    if folds == None:
       #k_folds =StratifiedKFold(n_splits=5 , random_state=0)
       k_folds = RepeatedKFold(n_splits=2, n_repeats=5, random_state=0)
-      print("F: "+str(k_folds.split(samples)))
+      #print("F: "+str(k_folds.split(samples)))
    
    predictionsTotal = np.array([])
    #for train_index, test_index in k_folds.split(samples,classes):
@@ -348,7 +348,7 @@ def fitness1(genom,extra=None):
         score+=f1_score(y_test, predictions)
 
 
-    return score/5
+    return score/10
 
      
 
@@ -420,7 +420,7 @@ def prep(df):
       #print("X: ",X_all)
 
    #normalize
-   X_all = preprocessing.MinMaxScaler((1,2)).fit(X_all).transform(X_all)
+   X_all = preprocessing.MinMaxScaler((0,1)).fit(X_all).transform(X_all)
    #print(X_all[0:5,:])
 
    #print head
@@ -431,6 +431,65 @@ def prep(df):
    x_train, x_test, y_train, y_test = train_test_split(X_all,y_all,test_size =test_rate,stratify=y_all,random_state=0)
 
    return x_train, x_test,y_train,y_test
+
+def prep2(df):
+   #sample data
+
+   #remove repeated rows
+   df = df.drop_duplicates()
+
+   #print(df.head())
+   #dropnas
+   #df.isna().sum()
+   df=df.dropna(axis=0)
+   #print(df["Attr1"].value_counts())
+   #binarize categorical values
+   features = list(df.head(0)) 
+   colection = []
+   names =[]
+   for f in features:
+      if df[f].dtype =='O' and f!=class_name :
+         colection.append(pd.get_dummies(df[f],prefix=f).iloc[:,1:])
+         names.append(f)
+   if(len(colection)>0):
+      df =df.drop(names,axis=1)
+      
+      concatdf  =pd.concat(colection,axis =1)
+      
+      df = pd.concat([df,concatdf],axis=1)
+      
+      df.shape
+
+   #print(df.shape)
+   report_file.write("data size: "+str(df.shape)+"\n")
+
+   #get class distribuition
+
+   target_counts = df[class_name].value_counts()
+   rate_of_maiority = max(target_counts)/sum(target_counts) 
+   #print(rate_of_maiority  )
+   report_file.write("portion of class: "+str(max(target_counts)/sum(target_counts))+"\n")
+
+   #reduce to featureset and class
+   X_all = df.drop([class_name],axis=1)
+   y_all = df[class_name]
+
+   #rebalanced data
+
+   y_all=y_all.values
+
+   #normalize
+   X_all = preprocessing.MinMaxScaler((0,1)).fit(X_all).transform(X_all)
+   #print(X_all[0:5,:])
+
+   #print head
+   #print(df.head(0))
+
+
+   #generate train and test_set
+  
+   return X_all,y_all
+
 #-----------------------------------------END HEADER-----------------------------------------------
 
 
@@ -530,6 +589,9 @@ print("Tunning:" +  str(elapsed()))
 cls = grid_obj.best_estimator_
     
 cls.fit(x_train, y_train)
+
+df = pd.read_csv("Clean Datasets//"+dataset_name+".csv")
+x_test, y_test = prep2(df)
 mklpredictions = cls.predict(x_test)
 pred_file.write("MKL: " +str(kfolding(x_test,y_test,cls,"MKL_random")[1])+"\n")
 
@@ -540,4 +602,3 @@ report_file.close()
 exit()
 
 
-x
